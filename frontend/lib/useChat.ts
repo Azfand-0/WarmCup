@@ -174,9 +174,22 @@ export function useChat(room: string, username: string, mood: string, flair: str
     ws.onerror = () => ws.close();
   }, [username, mood, flair, color]);
 
+  // Persist non-system messages per room (last 50)
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const toSave = messages.filter((m) => !m.isSystem).slice(-50);
+    try { localStorage.setItem(`warmcup_msgs_${room}`, JSON.stringify(toSave)); } catch { /* quota */ }
+  }, [messages, room]);
+
   useEffect(() => {
     aliveRef.current = true;
-    setMessages([]); setCount(0); setConnected(false); setTypingUsers({}); setReactions({});
+    // Load cached messages for this room before connecting
+    try {
+      const cached = localStorage.getItem(`warmcup_msgs_${room}`);
+      const parsed: ChatMessage[] = cached ? JSON.parse(cached) : [];
+      setMessages(parsed);
+    } catch { setMessages([]); }
+    setCount(0); setConnected(false); setTypingUsers({}); setReactions({});
     wsRef.current?.close();
     connect();
     return () => { aliveRef.current = false; clearTimeout(timerRef.current); wsRef.current?.close(); };

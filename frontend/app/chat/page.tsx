@@ -62,11 +62,14 @@ function ChatApp() {
   const [blockedWarning, setBlockedWarning] = useState(false);
   const [showPremium, setShowPremium]     = useState(false);
   const [showTherapists, setShowTherapists] = useState(false);
+  const [isScrolledUp, setIsScrolledUp]   = useState(false);
+  const [unreadCount, setUnreadCount]     = useState(0);
 
   const [premium, updatePremium] = usePremium();
 
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLInputElement>(null);
+  const bottomRef      = useRef<HTMLDivElement>(null);
+  const inputRef       = useRef<HTMLInputElement>(null);
+  const scrollAreaRef  = useRef<HTMLDivElement>(null);
 
   const streak      = useStreak();
   const sound       = useSound();
@@ -93,8 +96,37 @@ function ChatApp() {
   } = useChat(room, username, "", profile.flair, effectiveColor);
 
   useEffect(() => {
+    if (!isScrolledUp) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      setUnreadCount((c) => c + 1);
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (!isScrolledUp) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [typingUsers]);
+
+  // Tab title unread badge
+  useEffect(() => {
+    document.title = unreadCount > 0 ? `(${unreadCount}) warmcup` : "warmcup";
+    return () => { document.title = "warmcup"; };
+  }, [unreadCount]);
+
+  function handleScroll() {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const scrolled = distFromBottom > 120;
+    setIsScrolledUp(scrolled);
+    if (!scrolled) setUnreadCount(0);
+  }
+
+  function scrollToBottom() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typingUsers]);
+    setUnreadCount(0);
+    setIsScrolledUp(false);
+  }
 
   useEffect(() => {
     if (username && room) recordVisit(room);
@@ -341,6 +373,15 @@ function ChatApp() {
             </div>
           </div>
           <RoomVibe vibe={vibe} onVote={sendVibeVote} />
+          {isPrivateRoom && (
+            <button
+              onClick={() => switchRoom({ id: "global", name: "Global", flag: "🌍", group: "country" })}
+              className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0 transition-opacity hover:opacity-70"
+              style={{ background: "var(--surface2)", color: "var(--muted)", border: "1px solid var(--border)" }}
+            >
+              ← Leave
+            </button>
+          )}
         </header>
 
         {/* Safe space bar */}
@@ -376,19 +417,32 @@ function ChatApp() {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+        <div
+          ref={scrollAreaRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-4 py-5 space-y-5 relative"
+        >
           {isQuietRoom ? (
             <QuietRoomBanner count={count} />
           ) : (
             <>
-              {messages.length === 0 && connected && (
+              {messages.filter((m) => !m.isSystem).length === 0 && connected && (
                 <div className="flex flex-col items-center justify-center h-full text-center py-20 gap-4">
                   <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "rgba(196,149,106,0.1)", border: "1px solid rgba(196,149,106,0.2)" }}>
-                    🕯️
+                    {isPrivateRoom ? "🔒" : "🕯️"}
                   </div>
                   <div>
-                    <p className="font-medium" style={{ color: "var(--text-soft)" }}>You made it here. That took courage.</p>
-                    <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>Say anything. No pressure. You&apos;re safe.</p>
+                    {isPrivateRoom ? (
+                      <>
+                        <p className="font-medium" style={{ color: "var(--text-soft)" }}>Waiting for your partner to join…</p>
+                        <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>Share the invite link or wait for them to accept.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium" style={{ color: "var(--text-soft)" }}>You made it here. That took courage.</p>
+                        <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>Say anything. No pressure. You&apos;re safe.</p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -471,7 +525,14 @@ function ChatApp() {
                         {/* Hover actions */}
                         {hoveredMsg === msg.id && !mine && (
                           <div className="flex items-center gap-1">
-                            <StartPrivateChatButton onSend={sendPrivateInvite} />
+                            <StartPrivateChatButton onSend={(roomId) => {
+                              sendPrivateInvite(roomId);
+                              const privRoomId = `priv-${roomId}`;
+                              setRoom(privRoomId);
+                              const url = new URL(window.location.href);
+                              url.searchParams.set("room", privRoomId);
+                              window.history.replaceState(null, "", url.toString());
+                            }} />
                             <button
                               onClick={() => setWarmCupTarget({ userId: msg.userId, username: msg.username })}
                               title="Send warm cup"
@@ -530,6 +591,17 @@ function ChatApp() {
             </>
           )}
           <div ref={bottomRef} />
+
+          {/* Scroll-to-bottom FAB */}
+          {isScrolledUp && (
+            <button
+              onClick={scrollToBottom}
+              className="sticky bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold shadow-lg transition-all hover:opacity-90"
+              style={{ background: "var(--accent)", color: "#0f0d0a", border: "none" }}
+            >
+              ↓ {unreadCount > 0 ? `${unreadCount} new` : "scroll down"}
+            </button>
+          )}
         </div>
 
         <BetterHelpBanner />
