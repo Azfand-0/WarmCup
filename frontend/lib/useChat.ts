@@ -66,7 +66,11 @@ export function useChat(room: string, username: string, mood: string, flair: str
   moodRef.current     = mood;
 
   const addMessage = (msg: ChatMessage) =>
-    setMessages((p) => { const n = [...p, msg]; return n.length > MAX_MESSAGES ? n.slice(-MAX_MESSAGES) : n; });
+    setMessages((p) => {
+      if (p.some((m) => m.id === msg.id)) return p;
+      const n = [...p, msg];
+      return n.length > MAX_MESSAGES ? n.slice(-MAX_MESSAGES) : n;
+    });
 
   const connect = useCallback(() => {
     if (!aliveRef.current) return;
@@ -235,7 +239,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const sendVibeVote     = useCallback((v: string) => send({ type: "vibe_vote", vibe: v }), []);
   const toggleSlowMode   = useCallback(() => send({ type: "slow_mode" }), []);
   const updateProfile    = useCallback((m: string, f: string) => send({ type: "update_profile", mood: m, flair: f }), []);
-  const sendPrivateInvite = useCallback((roomId: string) => send({ type: "private_invite", roomId }), []);
+  const sendPrivateInvite = useCallback((roomId: string, targetUserId: string) => send({ type: "private_invite", roomId, targetUserId }), []);
   const dismissPrivateInvite = useCallback(() => setPrivateInvite(null), []);
 
   return {

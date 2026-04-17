@@ -1,6 +1,6 @@
 "use client";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useChat }        from "@/lib/useChat";
 import { getUsername }    from "@/lib/username";
 import { useStreak }      from "@/lib/useStreak";
@@ -39,10 +39,13 @@ import type { PremiumTier } from "@/lib/usePremium";
 
 function ChatApp() {
   const router       = useRouter();
-  const searchParams = useSearchParams();
 
   const [username]                         = useState(() => typeof window !== "undefined" ? getUsername() : "");
-  const [room, setRoom]                   = useState("global");
+  const [room, setRoom]                   = useState(() => {
+    if (typeof window === "undefined") return "global";
+    const p = new URLSearchParams(window.location.search);
+    return p.get("room") ?? detectCountryChannel();
+  });
   const [input, setInput]                 = useState("");
   const [sidebarOpen, setSidebarOpen]     = useState(false);
   const [countryOpen, setCountryOpen]     = useState(false);
@@ -76,9 +79,6 @@ function ChatApp() {
   const weeklyStats = useWeeklyRecap();
   const [profile]   = useUserProfile();
 
-  useEffect(() => {
-    setRoom(searchParams.get("room") ?? detectCountryChannel());
-  }, [searchParams]);
 
   const myColor       = getUserColor(username);
   const effectiveColor = premium.tier !== "none" && premium.customColor
@@ -352,7 +352,7 @@ function ChatApp() {
       {/* ── Main ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
 
-        <CrisisBanner />
+        <CrisisBanner autoExpand={showCrisis} />
 
         {/* Header */}
         <header
@@ -525,7 +525,7 @@ function ChatApp() {
                         {hoveredMsg === msg.id && !mine && (
                           <div className="flex items-center gap-1">
                             <StartPrivateChatButton onSend={(roomId) => {
-                              sendPrivateInvite(roomId);
+                              sendPrivateInvite(roomId, msg.userId);
                               const privRoomId = `priv-${roomId}`;
                               setRoom(privRoomId);
                               const url = new URL(window.location.href);

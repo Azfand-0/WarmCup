@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 
 const HOTLINES = [
   { flag: "🇺🇸", country: "US",  name: "988 Suicide & Crisis",     number: "988",           tel: "988"             },
@@ -12,9 +11,15 @@ const HOTLINES = [
   { flag: "🌍", country: "INT", name: "Find A Helpline",           number: "findahelpline.com", tel: null          },
 ];
 
-export default function CrisisBanner() {
-  const [expanded, setExpanded] = useState(false);
+import { useEffect, useState } from "react";
+
+export default function CrisisBanner({ autoExpand }: { autoExpand?: boolean }) {
+  const [expanded, setExpanded]   = useState(false);
   const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (autoExpand && !dismissed) setExpanded(true);
+  }, [autoExpand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (dismissed) return null;
 

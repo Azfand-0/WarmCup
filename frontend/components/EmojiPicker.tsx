@@ -25,9 +25,9 @@ interface Props {
 }
 
 export default function EmojiPicker({ onSelect }: Props) {
-  const [open, setOpen]   = useState(false);
-  const [tab, setTab]     = useState(0);
-  const ref               = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [tab, setTab]   = useState(0);
+  const ref             = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -39,6 +39,7 @@ export default function EmojiPicker({ onSelect }: Props) {
 
   return (
     <div ref={ref} className="relative flex-shrink-0">
+      {/* Trigger button */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -46,7 +47,6 @@ export default function EmojiPicker({ onSelect }: Props) {
         style={{
           background: open ? "rgba(196,149,106,0.15)" : "var(--surface2)",
           border: `1px solid ${open ? "rgba(196,149,106,0.4)" : "var(--border)"}`,
-          color: open ? "var(--accent)" : "var(--muted)",
         }}
         title="Add emoji"
       >
@@ -55,29 +55,28 @@ export default function EmojiPicker({ onSelect }: Props) {
 
       {open && (
         <div
-          className="absolute bottom-full left-0 mb-2 z-30 rounded-2xl overflow-hidden"
+          className="absolute z-40 rounded-2xl overflow-hidden"
           style={{
+            bottom: "calc(100% + 8px)",
+            left: 0,
+            width: "min(320px, calc(100vw - 24px))",
             background: "var(--surface)",
             border: "1px solid var(--border)",
-            boxShadow: "0 -8px 32px rgba(0,0,0,0.4)",
-            width: "min(280px, calc(100vw - 1.5rem))",
+            boxShadow: "0 -4px 24px rgba(0,0,0,0.5)",
           }}
         >
-          {/* Tabs */}
-          <div
-            className="flex border-b px-2 pt-2 gap-1"
-            style={{ borderColor: "var(--border)" }}
-          >
+          {/* Tab row */}
+          <div className="flex border-b" style={{ borderColor: "var(--border)" }}>
             {EMOJI_GROUPS.map((g, i) => (
               <button
                 key={g.label}
                 type="button"
                 onClick={() => setTab(i)}
-                className="flex-1 text-xs py-1.5 rounded-t-lg transition-colors"
+                className="flex-1 py-2 text-xs font-medium transition-colors"
                 style={{
                   background: tab === i ? "var(--surface2)" : "transparent",
                   color: tab === i ? "var(--accent)" : "var(--muted)",
-                  fontWeight: tab === i ? 600 : 400,
+                  borderBottom: tab === i ? "2px solid var(--accent)" : "2px solid transparent",
                 }}
               >
                 {g.label}
@@ -85,15 +84,15 @@ export default function EmojiPicker({ onSelect }: Props) {
             ))}
           </div>
 
-          {/* Emoji grid */}
-          <div className="p-3 grid grid-cols-8 gap-1">
+          {/* Grid — 8 cols, bigger touch targets */}
+          <div className="p-3 grid grid-cols-8 gap-0.5">
             {EMOJI_GROUPS[tab].emojis.map((emoji) => (
               <button
                 key={emoji}
                 type="button"
                 onClick={() => { onSelect(emoji); setOpen(false); }}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-xl transition-all hover:scale-125 active:scale-95"
-                style={{ background: "transparent" }}
+                className="aspect-square rounded-lg flex items-center justify-center text-xl transition-all hover:scale-110 active:scale-95"
+                style={{ background: "transparent", minWidth: 0 }}
               >
                 {emoji}
               </button>

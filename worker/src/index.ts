@@ -219,9 +219,11 @@ export class ChatRoom implements DurableObject {
       }
 
       case "private_invite": {
-        if (typeof data.roomId !== "string") return;
+        if (typeof data.roomId !== "string" || typeof data.targetUserId !== "string") return;
         const safeRoom = (data.roomId as string).replace(/[^a-z0-9-]/g, "").slice(0, 40);
-        this.broadcastAll({ type: "private_invite", fromUserId: meta.userId, fromUsername: meta.username, roomId: safeRoom, timestamp: now });
+        const payload  = JSON.stringify({ type: "private_invite", fromUserId: meta.userId, fromUsername: meta.username, roomId: safeRoom, timestamp: now });
+        const targets  = this.state.getWebSockets(data.targetUserId as string);
+        for (const tws of targets) try { tws.send(payload); } catch { /* gone */ }
         break;
       }
     }
@@ -229,8 +231,8 @@ export class ChatRoom implements DurableObject {
 
   webSocketClose(ws: WebSocket): void {
     const meta: SessionMeta | null = ws.deserializeAttachment();
-    const count = this.state.getWebSockets().length;
-    if (meta) this.broadcastAll({ type: "presence", event: "leave", username: meta.username, count: Math.max(0, count - 1) });
+    const count = this.state.getWebSockets().length; // already excludes the closed socket
+    if (meta) this.broadcastAll({ type: "presence", event: "leave", username: meta.username, count });
   }
 
   webSocketError(ws: WebSocket): void { this.webSocketClose(ws); }
