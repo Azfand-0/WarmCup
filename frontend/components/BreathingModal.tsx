@@ -74,7 +74,7 @@ export default function BreathingModal({ onClose }: Props) {
               width: "180px",
               height: "180px",
               border: "1px solid",
-              borderColor: phase.phaseIdx === 1 ? "rgba(184,169,212,0.4)" : "rgba(196,149,106,0.3)",
+              borderColor: phaseIdx === 1 ? "rgba(184,169,212,0.4)" : "rgba(196,149,106,0.3)",
               transform: `scale(${phase.scale})`,
               transition: `transform ${phase.duration}s ease-in-out, border-color 0.5s`,
               opacity: 0.4,
