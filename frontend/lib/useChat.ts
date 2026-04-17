@@ -50,6 +50,8 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const [userProfiles, setUserProfiles]   = useState<Record<string, { mood: string; flair: string }>>({});
 
   const wsRef         = useRef<WebSocket | null>(null);
+  const messagesRef   = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
   const timerRef      = useRef<ReturnType<typeof setTimeout>>();
   const typingTimers  = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const typingDebRef  = useRef<ReturnType<typeof setTimeout>>();
@@ -187,13 +189,6 @@ export function useChat(room: string, username: string, mood: string, flair: str
     ws.onerror = () => ws.close();
   }, [username]);
 
-  // Persist non-system messages per room (last 50)
-  useEffect(() => {
-    if (messages.length === 0) return;
-    const toSave = messages.filter((m) => !m.isSystem).slice(-50);
-    try { localStorage.setItem(`warmcup_msgs_${room}`, JSON.stringify(toSave)); } catch { /* quota */ }
-  }, [messages, room]);
-
   useEffect(() => {
     aliveRef.current = true;
     // Load cached messages for this room before connecting
@@ -205,7 +200,20 @@ export function useChat(room: string, username: string, mood: string, flair: str
     setCount(0); setConnected(false); setTypingUsers({}); setReactions({});
     wsRef.current?.close();
     connect();
-    return () => { aliveRef.current = false; clearTimeout(timerRef.current); wsRef.current?.close(); };
+
+    function persist() {
+      const toSave = messagesRef.current.filter((m) => !m.isSystem).slice(-50);
+      if (toSave.length > 0)
+        try { localStorage.setItem(`warmcup_msgs_${room}`, JSON.stringify(toSave)); } catch { /* quota */ }
+    }
+    window.addEventListener("beforeunload", persist);
+    return () => {
+      persist(); // save when switching rooms or unmounting
+      aliveRef.current = false;
+      clearTimeout(timerRef.current);
+      wsRef.current?.close();
+      window.removeEventListener("beforeunload", persist);
+    };
   }, [room, connect]);
 
   useEffect(() => {

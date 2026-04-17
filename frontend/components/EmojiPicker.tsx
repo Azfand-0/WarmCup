@@ -42,7 +42,7 @@ export default function EmojiPicker({ onSelect }: Props) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-all hover:opacity-80 active:scale-95"
+        className="w-9 h-9 rounded-xl flex items-center justify-center text-lg transition-all hover:opacity-80 active:scale-95"
         style={{
           background: open ? "rgba(196,149,106,0.15)" : "var(--surface2)",
           border: `1px solid ${open ? "rgba(196,149,106,0.4)" : "var(--border)"}`,
@@ -55,12 +55,12 @@ export default function EmojiPicker({ onSelect }: Props) {
 
       {open && (
         <div
-          className="absolute bottom-full right-0 mb-2 z-30 rounded-2xl overflow-hidden"
+          className="absolute bottom-full left-0 mb-2 z-30 rounded-2xl overflow-hidden"
           style={{
             background: "var(--surface)",
             border: "1px solid var(--border)",
             boxShadow: "0 -8px 32px rgba(0,0,0,0.4)",
-            width: "280px",
+            width: "min(280px, calc(100vw - 1.5rem))",
           }}
         >
           {/* Tabs */}

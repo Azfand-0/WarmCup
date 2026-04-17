@@ -609,7 +609,7 @@ function ChatApp() {
         {!isQuietRoom && (
           <form
             onSubmit={handleSend}
-            className="flex items-center gap-2 px-4 py-3 flex-shrink-0"
+            className="flex items-center gap-2 px-3 py-2.5 flex-shrink-0"
             style={{ background: "var(--surface)", borderTop: "1px solid var(--border)" }}
           >
             <EmojiPicker onSelect={insertEmoji} />
@@ -621,7 +621,7 @@ function ChatApp() {
               disabled={!connected}
               maxLength={500}
               autoComplete="off"
-              className="flex-1 px-4 py-2.5 rounded-xl text-sm outline-none disabled:opacity-40"
+              className="flex-1 min-w-0 px-3 py-2.5 rounded-xl text-sm outline-none disabled:opacity-40"
               style={{ background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)" }}
               onFocus={(e) => (e.target.style.borderColor = "rgba(196,149,106,0.5)")}
               onBlur={(e)  => (e.target.style.borderColor = "var(--border)")}
@@ -629,10 +629,11 @@ function ChatApp() {
             <button
               type="submit"
               disabled={!connected || !input.trim()}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95 disabled:opacity-30 flex-shrink-0"
+              className="w-10 h-10 sm:w-auto sm:h-auto sm:px-5 sm:py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95 disabled:opacity-30 flex-shrink-0 flex items-center justify-center"
               style={{ background: "linear-gradient(135deg, #c4956a 0%, #b8a9d4 100%)", color: "#0f0d0a" }}
             >
-              Send
+              <span className="hidden sm:inline">Send</span>
+              <span className="sm:hidden text-base">↑</span>
             </button>
           </form>
         )}
