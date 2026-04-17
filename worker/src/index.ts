@@ -149,6 +149,9 @@ export class ChatRoom implements DurableObject {
         const count = ((await this.state.storage.get<number>("msg_count")) ?? 0) + 1;
         await this.state.storage.put("msg_count", count);
 
+        const levelBadge = typeof data.levelBadge === "string"
+          ? data.levelBadge.slice(0, 4)
+          : "";
         this.broadcastAll({
           type: "message",
           id: crypto.randomUUID(),
@@ -157,6 +160,7 @@ export class ChatRoom implements DurableObject {
           mood: meta.mood,
           flair: meta.flair,
           color: meta.color,
+          levelBadge,
           text,
           timestamp: now,
         });
@@ -224,6 +228,32 @@ export class ChatRoom implements DurableObject {
         const payload  = JSON.stringify({ type: "private_invite", fromUserId: meta.userId, fromUsername: meta.username, roomId: safeRoom, timestamp: now });
         const targets  = this.state.getWebSockets(data.targetUserId as string);
         for (const tws of targets) try { tws.send(payload); } catch { /* gone */ }
+        break;
+      }
+
+      case "breathing_start":
+      case "breathing_stop":
+        this.broadcastExcept(ws, {
+          type: "breathing_update",
+          userId: meta.userId,
+          username: meta.username,
+          active: data.type === "breathing_start",
+        });
+        break;
+
+      case "panic_request": {
+        // Queue-based 1-on-1 panic match
+        const waiting = await this.state.storage.get<{ userId: string; wsTag: string }>("panic_waiting");
+        if (waiting && waiting.userId !== meta.userId) {
+          await this.state.storage.delete("panic_waiting");
+          const pairedRoom = `panic-${crypto.randomUUID().split("-")[0]}`;
+          const payload = JSON.stringify({ type: "panic_paired", roomId: pairedRoom });
+          for (const tws of this.state.getWebSockets(waiting.wsTag)) try { tws.send(payload); } catch { /* gone */ }
+          ws.send(payload);
+        } else {
+          await this.state.storage.put("panic_waiting", { userId: meta.userId, wsTag: meta.userId });
+          ws.send(JSON.stringify({ type: "panic_waiting" }));
+        }
         break;
       }
     }

@@ -10,6 +10,7 @@ export interface ChatMessage {
   mood?: string;
   flair?: string;
   color?: string;
+  levelBadge?: string;
   isSystem?: boolean;
 }
 
@@ -48,6 +49,12 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const [slowMode, setSlowMode]           = useState(false);
   const [milestone, setMilestone]         = useState<string | null>(null);
   const [userProfiles, setUserProfiles]   = useState<Record<string, { mood: string; flair: string }>>({});
+  const [breathingUsers, setBreathingUsers] = useState<Set<string>>(new Set());
+  const [helpedCount, setHelpedCount]     = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    return parseInt(localStorage.getItem("warmcup_helped_count") ?? "0", 10);
+  });
+  const [panicPaired, setPanicPaired]     = useState<string | null>(null);
 
   const wsRef         = useRef<WebSocket | null>(null);
   const messagesRef   = useRef<ChatMessage[]>([]);
@@ -100,15 +107,16 @@ export function useChat(room: string, username: string, mood: string, flair: str
 
         case "message":
           addMessage({
-            id:        ev.id as string,
-            userId:    ev.userId as string,
-            username:  ev.username as string,
-            text:      ev.text as string,
-            timestamp: (ev.timestamp as number) ?? Date.now(),
-            mood:      ev.mood as string,
-            flair:     ev.flair as string,
-            color:     ev.color as string,
-            isSystem:  (ev.isSystem as boolean) ?? false,
+            id:         ev.id as string,
+            userId:     ev.userId as string,
+            username:   ev.username as string,
+            text:       ev.text as string,
+            timestamp:  (ev.timestamp as number) ?? Date.now(),
+            mood:       ev.mood as string,
+            flair:      ev.flair as string,
+            color:      ev.color as string,
+            levelBadge: ev.levelBadge as string,
+            isSystem:   (ev.isSystem as boolean) ?? false,
           });
           break;
 
@@ -151,6 +159,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
         case "gratitude":
           setGratitude({ fromUsername: ev.fromUsername as string, fromColor: ev.fromColor as string, message: ev.message as string });
           setTimeout(() => setGratitude(null), 6000);
+          setHelpedCount((c) => { const n = c + 1; localStorage.setItem("warmcup_helped_count", String(n)); return n; });
           break;
 
         case "vibe_update":
@@ -180,6 +189,21 @@ export function useChat(room: string, username: string, mood: string, flair: str
 
         case "private_invite":
           setPrivateInvite({ fromUserId: ev.fromUserId as string, fromUsername: ev.fromUsername as string, roomId: ev.roomId as string });
+          break;
+
+        case "breathing_update": {
+          const uid = ev.userId as string;
+          const active = ev.active as boolean;
+          setBreathingUsers((prev) => {
+            const next = new Set(prev);
+            if (active) next.add(uid); else next.delete(uid);
+            return next;
+          });
+          break;
+        }
+
+        case "panic_paired":
+          setPanicPaired(ev.roomId as string);
           break;
       }
     };
@@ -231,7 +255,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
     if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(payload));
   };
 
-  const sendMessage      = useCallback((text: string) => send({ type: "message", text }), []);
+  const sendMessage      = useCallback((text: string, levelBadge?: string) => send({ type: "message", text, levelBadge }), []);
   const sendTyping       = useCallback(() => { clearTimeout(typingDebRef.current); typingDebRef.current = setTimeout(() => send({ type: "typing" }), 300); }, []);
   const sendReaction     = useCallback((messageId: string, emoji: string, action: "add" | "remove") => send({ type: "reaction", messageId, emoji, action }), []);
   const sendFeelingBetter = useCallback(() => send({ type: "feeling_better" }), []);
@@ -240,16 +264,21 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const toggleSlowMode   = useCallback(() => send({ type: "slow_mode" }), []);
   const updateProfile    = useCallback((m: string, f: string) => send({ type: "update_profile", mood: m, flair: f }), []);
   const sendPrivateInvite = useCallback((roomId: string, targetUserId: string) => send({ type: "private_invite", roomId, targetUserId }), []);
-  const dismissPrivateInvite = useCallback(() => setPrivateInvite(null), []);
+  const dismissPrivateInvite  = useCallback(() => setPrivateInvite(null), []);
+  const sendBreathingStart    = useCallback(() => send({ type: "breathing_start" }), []);
+  const sendBreathingStop     = useCallback(() => send({ type: "breathing_stop" }), []);
+  const dismissPanicPaired    = useCallback(() => setPanicPaired(null), []);
 
   return {
     messages, count, connected, showConnecting, myUserId,
     typingUsers, reactions, vibe, slowMode,
     milestone, gratitude, userProfiles,
+    breathingUsers, helpedCount,
+    panicPaired, dismissPanicPaired,
     privateInvite, dismissPrivateInvite,
     sendMessage, sendTyping, sendReaction,
     sendFeelingBetter, sendGratitude,
     sendVibeVote, toggleSlowMode, updateProfile,
-    sendPrivateInvite,
+    sendPrivateInvite, sendBreathingStart, sendBreathingStop,
   };
 }

@@ -36,6 +36,7 @@ import TherapistDirectory from "@/components/TherapistDirectory";
 import ErrorBoundary      from "@/components/ErrorBoundary";
 import { usePremium }     from "@/lib/usePremium";
 import type { PremiumTier } from "@/lib/usePremium";
+import { useLevel }       from "@/lib/useLevel";
 
 function ChatApp() {
   const router       = useRouter();
@@ -69,6 +70,7 @@ function ChatApp() {
   const [unreadCount, setUnreadCount]     = useState(0);
 
   const [premium, updatePremium] = usePremium();
+  const { level, increment: incrementLevel } = useLevel();
 
   const bottomRef      = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLInputElement>(null);
@@ -79,8 +81,7 @@ function ChatApp() {
   const weeklyStats = useWeeklyRecap();
   const [profile]   = useUserProfile();
 
-
-  const myColor       = getUserColor(username);
+  const myColor        = getUserColor(username);
   const effectiveColor = premium.tier !== "none" && premium.customColor
     ? premium.customColor
     : myColor;
@@ -89,9 +90,12 @@ function ChatApp() {
     messages, count, connected, showConnecting, myUserId,
     typingUsers, reactions, vibe,
     milestone, gratitude, privateInvite, dismissPrivateInvite,
+    breathingUsers, helpedCount,
+    panicPaired, dismissPanicPaired,
     sendMessage, sendTyping, sendReaction,
     sendFeelingBetter, sendGratitude,
     sendVibeVote, sendPrivateInvite,
+    sendBreathingStart, sendBreathingStop,
   } = useChat(room, username, "", profile.flair, effectiveColor);
 
   useEffect(() => {
@@ -131,6 +135,18 @@ function ChatApp() {
     if (username && room) recordVisit(room);
   }, [username, room]);
 
+  // Navigate when panic match is found
+  useEffect(() => {
+    if (!panicPaired) return;
+    dismissPanicPaired();
+    const privRoomId = `priv-${panicPaired}`;
+    setRoom(privRoomId);
+    const url = new URL(window.location.href);
+    url.searchParams.set("room", privRoomId);
+    window.history.replaceState(null, "", url.toString());
+    setShowBreathing(true);
+  }, [panicPaired]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const raw = input.trim();
@@ -145,7 +161,7 @@ function ChatApp() {
       return;
     }
     if (crisis) setShowCrisis(true);
-    if (filtered) sendMessage(filtered);
+    if (filtered) { sendMessage(filtered, level.badge); incrementLevel(); }
     setInput("");
     inputRef.current?.focus();
   }
@@ -222,10 +238,12 @@ function ChatApp() {
                 {username}
                 {premium.tier === "calm" && <span className="ml-1">✨</span>}
                 {premium.tier === "glow" && <span className="ml-1">🌟</span>}
+                <span className="ml-1" title={`Level ${level.num} · ${level.name}`}>{level.badge}</span>
               </p>
-              {streak > 0 && (
-                <p className="text-xs" style={{ color: "var(--muted)" }}>🔥 Day {streak}</p>
-              )}
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                {level.name}{streak > 0 ? ` · 🔥 ${streak}d` : ""}
+                {helpedCount > 0 && ` · helped ${helpedCount} 💚`}
+              </p>
             </div>
           </div>
         </div>
@@ -295,6 +313,14 @@ function ChatApp() {
 
         {/* Bottom tools + share */}
         <div className="px-3 pb-4 pt-3 flex-shrink-0 space-y-2.5" style={{ borderTop: "1px solid var(--border)" }}>
+          {/* Panic match button */}
+          <button
+            onClick={() => { sendBreathingStart(); switchRoom({ id: "panic-match", name: "Panic Match", flag: "🆘", group: "themed" as const }); }}
+            className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 hover:opacity-90"
+            style={{ background: "rgba(196,80,80,0.15)", color: "#e88080", border: "1px solid rgba(196,80,80,0.3)" }}
+          >
+            🆘 I&apos;m panicking right now
+          </button>
           <div className="flex items-center gap-1.5">
             {[
               { icon: "🫁", title: "Breathing", onClick: () => setShowBreathing(true) },
@@ -485,20 +511,25 @@ function ChatApp() {
                     onMouseLeave={() => setHoveredMsg(null)}
                   >
                     {/* Avatar — shown for both sides */}
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-5"
-                      style={{
-                        background: `${msgColor}22`,
-                        color: msgColor,
-                        border: isGlow
-                          ? `2px solid ${msgColor}`
-                          : `1px solid ${msgColor}50`,
-                        boxShadow: isGlow
-                          ? `0 0 8px ${msgColor}90, 0 0 16px ${msgColor}40`
-                          : "none",
-                      }}
-                    >
-                      {msg.username[0].toUpperCase()}
+                    <div className="relative flex-shrink-0 mt-5">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                        style={{
+                          background: `${msgColor}22`,
+                          color: msgColor,
+                          border: isGlow
+                            ? `2px solid ${msgColor}`
+                            : `1px solid ${msgColor}50`,
+                          boxShadow: isGlow
+                            ? `0 0 8px ${msgColor}90, 0 0 16px ${msgColor}40`
+                            : "none",
+                        }}
+                      >
+                        {msg.username[0].toUpperCase()}
+                      </div>
+                      {breathingUsers.has(msg.userId) && (
+                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full breathing-dot" style={{ background: "var(--online)", border: "2px solid var(--surface)" }} title={`${msg.username} is breathing`} />
+                      )}
                     </div>
 
                     {/* Content */}
@@ -517,6 +548,7 @@ function ChatApp() {
                           {msg.username}
                           {isCalm && " ✨"}
                           {isGlow && " 🌟"}
+                          {msg.levelBadge && <span className="ml-1 text-xs">{msg.levelBadge}</span>}
                         </span>
                         {mine && (
                           <span className="text-xs" style={{ color: "var(--muted)" }}>you</span>
@@ -651,7 +683,7 @@ function ChatApp() {
         />
       )}
       {showTherapists && <TherapistDirectory onClose={() => setShowTherapists(false)} />}
-      {showBreathing  && <BreathingModal onClose={() => setShowBreathing(false)} />}
+      {showBreathing  && <BreathingModal onClose={() => { setShowBreathing(false); sendBreathingStop(); }} onOpen={sendBreathingStart} />}
       {showGrounding  && <GroundingModal onClose={() => setShowGrounding(false)} />}
       {showDiary      && <PanicDiary onClose={() => setShowDiary(false)} currentMood="" currentRoom={room} />}
       {showRecap && weeklyStats && <WeeklyRecap stats={weeklyStats} onClose={() => setShowRecap(false)} />}

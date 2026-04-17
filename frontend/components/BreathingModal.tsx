@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
-interface Props { onClose: () => void; }
+interface Props { onClose: () => void; onOpen?: () => void; }
 
 // 4-7-8 breathing: inhale 4s, hold 7s, exhale 8s (19s cycle)
 // Clinically proven to activate the parasympathetic nervous system
@@ -11,13 +11,15 @@ const PHASES = [
   { label: "Breathe out", duration: 8, scale: 1.0, color: "rgba(126,200,160,0.2)"  },
 ];
 
-export default function BreathingModal({ onClose }: Props) {
+export default function BreathingModal({ onClose, onOpen }: Props) {
   const [phaseIdx, setPhaseIdx] = useState(0);
   const [counter, setCounter]   = useState(PHASES[0].duration);
   const [cycles, setCycles]     = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
 
   const phase = PHASES[phaseIdx];
+
+  useEffect(() => { onOpen?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setCounter(phase.duration);

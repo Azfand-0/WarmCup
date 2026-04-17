@@ -55,14 +55,15 @@ export default function EmojiPicker({ onSelect }: Props) {
 
       {open && (
         <div
-          className="absolute z-40 rounded-2xl overflow-hidden"
+          className="fixed z-50 rounded-2xl overflow-hidden"
           style={{
-            bottom: "calc(100% + 8px)",
-            left: 0,
-            width: "min(320px, calc(100vw - 24px))",
+            bottom: "72px",
+            left: "8px",
+            right: "8px",
+            maxWidth: "340px",
             background: "var(--surface)",
             border: "1px solid var(--border)",
-            boxShadow: "0 -4px 24px rgba(0,0,0,0.5)",
+            boxShadow: "0 -4px 32px rgba(0,0,0,0.6)",
           }}
         >
           {/* Tab row */}
