@@ -38,6 +38,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const [messages, setMessages]           = useState<ChatMessage[]>([]);
   const [count, setCount]                 = useState(0);
   const [connected, setConnected]         = useState(false);
+  const [showConnecting, setShowConnecting] = useState(false);
   const [myUserId, setMyUserId]           = useState("");
   const [typingUsers, setTypingUsers]     = useState<Record<string, string>>({});
   const [reactions, setReactions]         = useState<Reactions>({});
@@ -54,7 +55,13 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const typingDebRef  = useRef<ReturnType<typeof setTimeout>>();
   const aliveRef      = useRef(true);
   const roomRef       = useRef(room);
+  const colorRef      = useRef(color);
+  const flairRef      = useRef(flair);
+  const moodRef       = useRef(mood);
   roomRef.current     = room;
+  colorRef.current    = color;
+  flairRef.current    = flair;
+  moodRef.current     = mood;
 
   const addMessage = (msg: ChatMessage) =>
     setMessages((p) => { const n = [...p, msg]; return n.length > MAX_MESSAGES ? n.slice(-MAX_MESSAGES) : n; });
@@ -65,12 +72,13 @@ export function useChat(room: string, username: string, mood: string, flair: str
 
     const base = WORKER_URL.replace(/^http/, "ws");
     const params = new URLSearchParams({
-      username, room: roomRef.current, mood, flair, color,
+      username, room: roomRef.current,
+      mood: moodRef.current, flair: flairRef.current, color: colorRef.current,
     });
     const ws = new WebSocket(`${base}/chat/${roomRef.current}?${params}`);
     wsRef.current = ws;
 
-    ws.onopen = () => { setConnected(true); clearTimeout(timerRef.current); };
+    ws.onopen = () => { setConnected(true); setShowConnecting(false); clearTimeout(timerRef.current); };
 
     ws.onmessage = ({ data }) => {
       let ev: Record<string, unknown>;
@@ -170,9 +178,14 @@ export function useChat(room: string, username: string, mood: string, flair: str
       }
     };
 
-    ws.onclose = () => { setConnected(false); if (aliveRef.current) timerRef.current = setTimeout(connect, RECONNECT_DELAY); };
+    ws.onclose = () => {
+      setConnected(false);
+      if (aliveRef.current) {
+        timerRef.current = setTimeout(() => { setShowConnecting(true); connect(); }, RECONNECT_DELAY);
+      }
+    };
     ws.onerror = () => ws.close();
-  }, [username, mood, flair, color]);
+  }, [username]);
 
   // Persist non-system messages per room (last 50)
   useEffect(() => {
@@ -218,7 +231,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const dismissPrivateInvite = useCallback(() => setPrivateInvite(null), []);
 
   return {
-    messages, count, connected, myUserId,
+    messages, count, connected, showConnecting, myUserId,
     typingUsers, reactions, vibe, slowMode,
     milestone, gratitude, userProfiles,
     privateInvite, dismissPrivateInvite,

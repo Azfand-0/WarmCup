@@ -41,7 +41,7 @@ function ChatApp() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
-  const [username, setUsername]           = useState("");
+  const [username]                         = useState(() => typeof window !== "undefined" ? getUsername() : "");
   const [room, setRoom]                   = useState("global");
   const [input, setInput]                 = useState("");
   const [sidebarOpen, setSidebarOpen]     = useState(false);
@@ -77,7 +77,6 @@ function ChatApp() {
   const [profile]   = useUserProfile();
 
   useEffect(() => {
-    setUsername(getUsername());
     setRoom(searchParams.get("room") ?? detectCountryChannel());
   }, [searchParams]);
 
@@ -87,7 +86,7 @@ function ChatApp() {
     : myColor;
 
   const {
-    messages, count, connected, myUserId,
+    messages, count, connected, showConnecting, myUserId,
     typingUsers, reactions, vibe,
     milestone, gratitude, privateInvite, dismissPrivateInvite,
     sendMessage, sendTyping, sendReaction,
@@ -368,8 +367,8 @@ function ChatApp() {
               {isPrivateRoom && <span className="ml-2 text-xs font-normal" style={{ color: "var(--muted)" }}>· private</span>}
             </div>
             <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
-              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 online-dot" style={{ background: connected ? "var(--online)" : "var(--danger)" }} />
-              {connected ? (count <= 1 ? "Just you — others will join" : `${count} people here`) : "Connecting…"}
+              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 online-dot" style={{ background: connected ? "var(--online)" : showConnecting ? "var(--danger)" : "var(--muted)" }} />
+              {connected ? (count <= 1 ? "Just you — others will join" : `${count} people here`) : showConnecting ? "Reconnecting…" : ""}
             </div>
           </div>
           <RoomVibe vibe={vibe} onVote={sendVibeVote} />
@@ -618,7 +617,7 @@ function ChatApp() {
               ref={inputRef}
               value={input}
               onChange={(e) => { setInput(e.target.value); sendTyping(); }}
-              placeholder={connected ? "Share what's on your heart…" : "Connecting…"}
+              placeholder={connected ? "Share what's on your heart…" : showConnecting ? "Reconnecting…" : "Share what's on your heart…"}
               disabled={!connected}
               maxLength={500}
               autoComplete="off"

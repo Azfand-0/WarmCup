@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export type PremiumTier = "none" | "calm" | "glow";
 
@@ -17,22 +17,22 @@ const DEFAULT: PremiumStatus = {
 
 const KEY = "warmcup_premium";
 
-export function usePremium(): [PremiumStatus, (patch: Partial<PremiumStatus>) => void] {
-  const [status, setStatus] = useState<PremiumStatus>(DEFAULT);
+function loadPremium(): PremiumStatus {
+  if (typeof window === "undefined") return DEFAULT;
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return DEFAULT;
+    const saved: PremiumStatus = JSON.parse(raw);
+    if (saved.expiresAt && Date.now() > saved.expiresAt) {
+      localStorage.removeItem(KEY);
+      return DEFAULT;
+    }
+    return saved;
+  } catch { return DEFAULT; }
+}
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return;
-      const saved: PremiumStatus = JSON.parse(raw);
-      // Expire check
-      if (saved.expiresAt && Date.now() > saved.expiresAt) {
-        localStorage.removeItem(KEY);
-        return;
-      }
-      setStatus(saved);
-    } catch { /* ignore */ }
-  }, []);
+export function usePremium(): [PremiumStatus, (patch: Partial<PremiumStatus>) => void] {
+  const [status, setStatus] = useState<PremiumStatus>(loadPremium);
 
   function update(patch: Partial<PremiumStatus>) {
     setStatus((prev) => {
