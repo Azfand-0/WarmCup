@@ -1,0 +1,16 @@
+name = "warmcup-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Durable Objects — one per chat room, hibernatable WebSockets for scale
+[[durable_objects.bindings]]
+name = "CHAT_ROOM"
+class_name = "ChatRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
+
+[vars]
+ENVIRONMENT = "production"

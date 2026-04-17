@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Warm candlelight palette — psychologically signals safety, warmth, home */
+  --bg:          #0f0d0a;
+  --surface:     #181410;
+  --surface2:    #211c16;
+  --surface3:    #2a2318;
+  --border:      #332a1f;
+  --accent:      #c4956a;   /* warm amber — trust, warmth */
+  --accent-glow: rgba(196, 149, 106, 0.18);
+  --accent-hover:#b07d52;
+  --lavender:    #b8a9d4;   /* soft lavender — calm, peace */
+  --text:        #ede0cc;   /* warm cream — soft on eyes */
+  --text-soft:   #c4b49a;
+  --muted:       #7a6a58;
+  --online:      #7ec8a0;   /* soft mint — gentle, not jarring */
+  --online-glow: rgba(126, 200, 160, 0.2);
+  --danger:      #c47a6a;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle warm grain texture on body for coziness */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+::selection { background: rgba(196, 149, 106, 0.25); }
+
+/* ── Breathing circle ──────────────────────────────────── */
+@keyframes breathe-in {
+  0%   { transform: scale(1);    opacity: 0.5; }
+  50%  { transform: scale(1.35); opacity: 1;   }
+  100% { transform: scale(1);    opacity: 0.5; }
+}
+
+@keyframes breathe-ring {
+  0%   { transform: scale(1);    opacity: 0.15; }
+  50%  { transform: scale(1.5);  opacity: 0;    }
+  100% { transform: scale(1);    opacity: 0.15; }
+}
+
+.breathe-circle { animation: breathe-in 7s ease-in-out infinite; }
+.breathe-ring   { animation: breathe-ring 7s ease-in-out infinite; }
+
+/* ── Accent glow pulse ─────────────────────────────────── */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
+  50%       { box-shadow: 0 0 40px rgba(196, 149, 106, 0.3); }
+}
+
+/* ── Message fade-in ───────────────────────────────────── */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.msg-in { animation: msg-in 0.25s ease-out forwards; }
+
+/* ── Online dot pulse ──────────────────────────────────── */
+@keyframes online-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--online-glow); }
+  50%       { box-shadow: 0 0 0 5px transparent; }
+}
+.online-dot { animation: online-pulse 2.5s ease-in-out infinite; }
+
+/* ── Premium Glow: shimmer on message bubbles ──────────── */
+@keyframes shimmer-slide {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.msg-glow-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.msg-glow-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent        0%,
+    rgba(255,255,255,0.04) 40%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 60%,
+    transparent        100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-slide 2.5s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* ── Landing page section fade-up ─────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0);     }
+}
+.fade-up { animation: fade-up 0.6s ease-out forwards; }
+
+/* ── Gradient text helper ──────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #c4956a, #b8a9d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
