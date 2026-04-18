@@ -11,7 +11,15 @@ export interface ChatMessage {
   flair?: string;
   color?: string;
   levelBadge?: string;
+  replyTo?: { id: string; username: string; text: string };
   isSystem?: boolean;
+}
+
+export interface OnlineUser {
+  userId: string;
+  username: string;
+  color: string;
+  mood: string;
 }
 
 export type Reactions = Record<string, Record<string, string[]>>;
@@ -50,6 +58,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const [milestone, setMilestone]         = useState<string | null>(null);
   const [userProfiles, setUserProfiles]   = useState<Record<string, { mood: string; flair: string }>>({});
   const [breathingUsers, setBreathingUsers] = useState<Set<string>>(new Set());
+  const [onlineUsers, setOnlineUsers]       = useState<OnlineUser[]>([]);
   const [helpedCount, setHelpedCount]     = useState<number>(() => {
     if (typeof window === "undefined") return 0;
     return parseInt(localStorage.getItem("warmcup_helped_count") ?? "0", 10);
@@ -103,6 +112,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
           setCount((ev.count as number) ?? 0);
           setVibe((ev.vibe as RoomVibe) ?? "supportive");
           setSlowMode((ev.slowMode as boolean) ?? false);
+          setOnlineUsers((ev.users as OnlineUser[]) ?? []);
           break;
 
         case "message":
@@ -116,12 +126,21 @@ export function useChat(room: string, username: string, mood: string, flair: str
             flair:      ev.flair as string,
             color:      ev.color as string,
             levelBadge: ev.levelBadge as string,
+            replyTo:    ev.replyTo as ChatMessage["replyTo"],
             isSystem:   (ev.isSystem as boolean) ?? false,
           });
           break;
 
         case "presence":
           setCount((ev.count as number) ?? 0);
+          if (ev.event === "join") {
+            setOnlineUsers((prev) => {
+              const filtered = prev.filter((u) => u.username !== ev.username);
+              return [...filtered, { userId: ev.userId as string, username: ev.username as string, color: ev.color as string, mood: ev.mood as string }];
+            });
+          } else {
+            setOnlineUsers((prev) => prev.filter((u) => u.username !== ev.username));
+          }
           addMessage({
             id: `sys-${Date.now()}-${Math.random()}`,
             userId: "system", username: "system",
@@ -267,7 +286,8 @@ export function useChat(room: string, username: string, mood: string, flair: str
     if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(payload));
   };
 
-  const sendMessage      = useCallback((text: string, levelBadge?: string) => send({ type: "message", text, levelBadge }), []);
+  const sendMessage = useCallback((text: string, levelBadge?: string, replyTo?: ChatMessage["replyTo"]) =>
+    send({ type: "message", text, levelBadge, replyTo }), []);
   const sendTyping       = useCallback(() => { clearTimeout(typingDebRef.current); typingDebRef.current = setTimeout(() => send({ type: "typing" }), 300); }, []);
   const sendReaction     = useCallback((messageId: string, emoji: string, action: "add" | "remove") => send({ type: "reaction", messageId, emoji, action }), []);
   const sendFeelingBetter = useCallback(() => send({ type: "feeling_better" }), []);
@@ -285,7 +305,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
     messages, count, connected, showConnecting, myUserId,
     typingUsers, reactions, vibe, slowMode,
     milestone, gratitude, userProfiles,
-    breathingUsers, helpedCount,
+    breathingUsers, helpedCount, onlineUsers,
     panicPaired, dismissPanicPaired,
     privateInvite, dismissPrivateInvite,
     sendMessage, sendTyping, sendReaction,

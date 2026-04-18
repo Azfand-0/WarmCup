@@ -11,6 +11,13 @@ interface StoredMessage {
   timestamp: number;
   color: string;
   levelBadge?: string;
+  replyTo?: { id: string; username: string; text: string };
+}
+
+interface WallPost {
+  id: string;
+  message: string;
+  timestamp: number;
 }
 
 const MAX_HISTORY = 50;
@@ -29,7 +36,7 @@ interface SessionMeta {
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Upgrade, Connection",
 };
 
@@ -65,6 +72,31 @@ export class ChatRoom implements DurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+
+    // Wall endpoints — GET all posts, POST new post
+    if (url.pathname === "/wall") {
+      if (request.method === "GET") {
+        const posts = (await this.state.storage.get<WallPost[]>("wall_posts")) ?? [];
+        return Response.json({ posts: posts.slice(-100) }, { headers: CORS });
+      }
+      if (request.method === "POST") {
+        let body: { message?: string };
+        try { body = await request.json() as { message?: string }; } catch {
+          return Response.json({ error: "bad json" }, { status: 400, headers: CORS });
+        }
+        const message = typeof body.message === "string"
+          ? body.message.replace(/[<>]/g, "").trim().slice(0, 200) : "";
+        if (!message) return Response.json({ error: "empty" }, { status: 400, headers: CORS });
+        const posts = (await this.state.storage.get<WallPost[]>("wall_posts")) ?? [];
+        posts.push({ id: crypto.randomUUID(), message, timestamp: Date.now() });
+        if (posts.length > 500) posts.splice(0, posts.length - 500);
+        await this.state.storage.put("wall_posts", posts);
+        return Response.json({ ok: true }, { headers: CORS });
+      }
+      return new Response("method not allowed", { status: 405, headers: CORS });
+    }
+
     if (request.headers.get("Upgrade") !== "websocket") {
       const wsCount   = this.state.getWebSockets().length;
       const vibe      = (await this.state.storage.get<string>("vibe")) ?? "supportive";
@@ -73,7 +105,6 @@ export class ChatRoom implements DurableObject {
       return Response.json({ count: wsCount, vibe, msgCount, slowMode }, { headers: CORS });
     }
 
-    const url      = new URL(request.url);
     const rawName  = url.searchParams.get("username") || "Anonymous";
     const username = rawName.replace(/[<>"'&]/g, "").slice(0, 30).trim() || "Anonymous";
     const room     = url.searchParams.get("room") || "global";
@@ -115,6 +146,12 @@ export class ChatRoom implements DurableObject {
 
     const wsCount = this.state.getWebSockets().length;
 
+    // Build current users list for the welcome payload
+    const currentUsers = this.state.getWebSockets()
+      .map((ws) => ws.deserializeAttachment() as SessionMeta | null)
+      .filter((m): m is SessionMeta => m !== null && m.userId !== meta.userId)
+      .map((m) => ({ userId: m.userId, username: m.username, color: m.color, mood: m.mood }));
+
     server.send(JSON.stringify({
       type: "welcome",
       userId: meta.userId,
@@ -123,6 +160,7 @@ export class ChatRoom implements DurableObject {
       vibe: vibe ?? "supportive",
       msgCount: msgCount ?? 0,
       slowMode: slowMode ?? false,
+      users: currentUsers,
     }));
 
     // Send room history so new joiners see recent messages
@@ -133,6 +171,7 @@ export class ChatRoom implements DurableObject {
     this.broadcastExcept(server, {
       type: "presence",
       event: "join",
+      userId: meta.userId,
       username,
       mood,
       flair,
@@ -180,6 +219,18 @@ export class ChatRoom implements DurableObject {
           ? data.levelBadge.slice(0, 4) : "";
         const msgId = crypto.randomUUID();
 
+        // Validate replyTo
+        const replyTo = (
+          data.replyTo &&
+          typeof (data.replyTo as Record<string, unknown>).id === "string" &&
+          typeof (data.replyTo as Record<string, unknown>).username === "string" &&
+          typeof (data.replyTo as Record<string, unknown>).text === "string"
+        ) ? {
+          id: (data.replyTo as Record<string, string>).id,
+          username: (data.replyTo as Record<string, string>).username.slice(0, 30),
+          text: (data.replyTo as Record<string, string>).text.slice(0, 100),
+        } : undefined;
+
         this.broadcastAll({
           type: "message",
           id: msgId,
@@ -191,11 +242,12 @@ export class ChatRoom implements DurableObject {
           levelBadge,
           text,
           timestamp: now,
+          replyTo,
         });
 
         // Persist to room history (last 50 non-system messages)
         const history = (await this.state.storage.get<StoredMessage[]>("history")) ?? [];
-        history.push({ id: msgId, userId: meta.userId, username: meta.username, text, timestamp: now, color: meta.color, levelBadge });
+        history.push({ id: msgId, userId: meta.userId, username: meta.username, text, timestamp: now, color: meta.color, levelBadge, replyTo });
         if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
         await this.state.storage.put("history", history);
 
@@ -296,7 +348,7 @@ export class ChatRoom implements DurableObject {
   webSocketClose(ws: WebSocket): void {
     const meta: SessionMeta | null = ws.deserializeAttachment();
     const count = this.state.getWebSockets().length; // already excludes the closed socket
-    if (meta) this.broadcastAll({ type: "presence", event: "leave", username: meta.username, count });
+    if (meta) this.broadcastAll({ type: "presence", event: "leave", userId: meta.userId, username: meta.username, count });
   }
 
   webSocketError(ws: WebSocket): void { this.webSocketClose(ws); }
@@ -321,6 +373,10 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+
+    if (url.pathname === "/wall") {
+      return env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName("__wall__")).fetch(request);
+    }
 
     if (url.pathname.startsWith("/chat/") || url.pathname.startsWith("/presence/")) {
       const raw  = url.pathname.split("/")[2] ?? "global";

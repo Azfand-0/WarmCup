@@ -1,7 +1,9 @@
 "use client";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useChat }        from "@/lib/useChat";
+import { useNotifications } from "@/lib/useNotifications";
 import { getUsername }    from "@/lib/username";
 import { useStreak }      from "@/lib/useStreak";
 import { useSound }       from "@/lib/useSound";
@@ -28,6 +30,7 @@ import CommunityMilestone from "@/components/CommunityMilestone";
 import GratitudeToast     from "@/components/GratitudeToast";
 import QuietRoomBanner    from "@/components/QuietRoomBanner";
 import EmojiPicker        from "@/components/EmojiPicker";
+import OnlineUsers        from "@/components/OnlineUsers";
 import ReportModal        from "@/components/ReportModal";
 import SafetyNotice       from "@/components/SafetyNotice";
 import PremiumModal       from "@/components/PremiumModal";
@@ -68,6 +71,7 @@ function ChatApp() {
   const [showTherapists, setShowTherapists] = useState(false);
   const [isScrolledUp, setIsScrolledUp]   = useState(false);
   const [unreadCount, setUnreadCount]     = useState(0);
+  const [replyTo, setReplyTo]             = useState<{ id: string; username: string; text: string } | null>(null);
 
   const [premium, updatePremium] = usePremium();
   const { level, increment: incrementLevel } = useLevel();
@@ -76,8 +80,9 @@ function ChatApp() {
   const inputRef       = useRef<HTMLInputElement>(null);
   const scrollAreaRef  = useRef<HTMLDivElement>(null);
 
-  const streak      = useStreak();
-  const sound       = useSound();
+  const streak        = useStreak();
+  const sound         = useSound();
+  const notifications = useNotifications();
   const weeklyStats = useWeeklyRecap();
   const [profile]   = useUserProfile();
 
@@ -90,7 +95,7 @@ function ChatApp() {
     messages, count, connected, showConnecting, myUserId,
     typingUsers, reactions, vibe,
     milestone, gratitude, privateInvite, dismissPrivateInvite,
-    breathingUsers, helpedCount,
+    breathingUsers, helpedCount, onlineUsers,
     panicPaired, dismissPanicPaired,
     sendMessage, sendTyping, sendReaction,
     sendFeelingBetter, sendGratitude,
@@ -98,13 +103,24 @@ function ChatApp() {
     sendBreathingStart, sendBreathingStop,
   } = useChat(room, username, "", profile.flair, effectiveColor);
 
+  const prevMsgLenRef = useRef(0);
   useEffect(() => {
+    const prev = prevMsgLenRef.current;
+    prevMsgLenRef.current = messages.length;
     if (!isScrolledUp) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     } else {
       setUnreadCount((c) => c + 1);
     }
-  }, [messages]);
+    if (messages.length > prev && myUserId) {
+      const newOnes = messages.slice(prev).filter((m) => !m.isSystem && m.userId !== myUserId);
+      if (newOnes.length > 0) {
+        if (document.hidden) notifications.beep();
+        const latest = newOnes[newOnes.length - 1];
+        notifications.notify("warmcup", `${latest.username}: ${latest.text.slice(0, 80)}`);
+      }
+    }
+  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isScrolledUp) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -161,8 +177,9 @@ function ChatApp() {
       return;
     }
     if (crisis) setShowCrisis(true);
-    if (filtered) { sendMessage(filtered, level.badge); incrementLevel(); }
+    if (filtered) { sendMessage(filtered, level.badge, replyTo ?? undefined); incrementLevel(); }
     setInput("");
+    setReplyTo(null);
     inputRef.current?.focus();
   }
 
@@ -311,6 +328,11 @@ function ChatApp() {
           </div>
         </nav>
 
+        {/* Online users */}
+        <div className="flex-shrink-0 py-1" style={{ borderTop: "1px solid var(--border)" }}>
+          <OnlineUsers users={onlineUsers} myUserId={myUserId} />
+        </div>
+
         {/* Bottom tools + share */}
         <div className="px-3 pb-4 pt-3 flex-shrink-0 space-y-2.5" style={{ borderTop: "1px solid var(--border)" }}>
           {/* Panic match button */}
@@ -367,6 +389,13 @@ function ChatApp() {
             </button>
           </div>
           <ShareButton />
+          <Link
+            href="/wall"
+            className="w-full py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:opacity-80"
+            style={{ background: "rgba(126,200,160,0.08)", color: "var(--online)", border: "1px solid rgba(126,200,160,0.2)" }}
+          >
+            💚 I made it through
+          </Link>
           <p className="text-xs" style={{ color: "var(--muted)" }}>Anonymous · Nothing stored</p>
         </div>
       </aside>
@@ -554,32 +583,44 @@ function ChatApp() {
                           <span className="text-xs" style={{ color: "var(--muted)" }}>you</span>
                         )}
                         {/* Hover actions */}
-                        {hoveredMsg === msg.id && !mine && (
+                        {hoveredMsg === msg.id && (
                           <div className="flex items-center gap-1">
-                            <StartPrivateChatButton onSend={(roomId) => {
-                              sendPrivateInvite(roomId, msg.userId);
-                              const privRoomId = `priv-${roomId}`;
-                              setRoom(privRoomId);
-                              const url = new URL(window.location.href);
-                              url.searchParams.set("room", privRoomId);
-                              window.history.replaceState(null, "", url.toString());
-                            }} />
                             <button
-                              onClick={() => setWarmCupTarget({ userId: msg.userId, username: msg.username })}
-                              title="Send warm cup"
+                              onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
+                              title="Reply"
                               className="text-xs px-1.5 py-0.5 rounded-lg"
-                              style={{ background: "rgba(196,149,106,0.1)", color: "var(--accent)", border: "1px solid rgba(196,149,106,0.2)" }}
+                              style={{ background: "rgba(184,169,212,0.1)", color: "var(--lavender)", border: "1px solid rgba(184,169,212,0.2)" }}
                             >
-                              🍵
+                              ↩
                             </button>
-                            <button
-                              onClick={() => setReportTarget({ messageId: msg.id, username: msg.username })}
-                              title="Report message"
-                              className="text-xs px-1.5 py-0.5 rounded-lg"
-                              style={{ background: "rgba(196,122,106,0.1)", color: "#e8a090", border: "1px solid rgba(196,122,106,0.2)" }}
-                            >
-                              🚩
-                            </button>
+                            {!mine && (
+                              <>
+                                <StartPrivateChatButton onSend={(roomId) => {
+                                  sendPrivateInvite(roomId, msg.userId);
+                                  const privRoomId = `priv-${roomId}`;
+                                  setRoom(privRoomId);
+                                  const url = new URL(window.location.href);
+                                  url.searchParams.set("room", privRoomId);
+                                  window.history.replaceState(null, "", url.toString());
+                                }} />
+                                <button
+                                  onClick={() => setWarmCupTarget({ userId: msg.userId, username: msg.username })}
+                                  title="Send warm cup"
+                                  className="text-xs px-1.5 py-0.5 rounded-lg"
+                                  style={{ background: "rgba(196,149,106,0.1)", color: "var(--accent)", border: "1px solid rgba(196,149,106,0.2)" }}
+                                >
+                                  🍵
+                                </button>
+                                <button
+                                  onClick={() => setReportTarget({ messageId: msg.id, username: msg.username })}
+                                  title="Report message"
+                                  className="text-xs px-1.5 py-0.5 rounded-lg"
+                                  style={{ background: "rgba(196,122,106,0.1)", color: "#e8a090", border: "1px solid rgba(196,122,106,0.2)" }}
+                                >
+                                  🚩
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -599,7 +640,12 @@ function ChatApp() {
                           boxShadow: isGlow && mine ? `0 2px 12px ${msgColor}40` : "none",
                         }}
                       >
-                        {msg.text}
+                        {msg.replyTo && (
+                          <div className="mb-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: "rgba(0,0,0,0.15)", borderLeft: "2px solid rgba(255,255,255,0.25)" }}>
+                            <span className="font-semibold">{msg.replyTo.username}</span>: {msg.replyTo.text.slice(0, 60)}{msg.replyTo.text.length > 60 ? "…" : ""}
+                          </div>
+                        )}
+                        <MessageText text={msg.text} />
                       </div>
 
                       {/* Reactions */}
@@ -636,6 +682,21 @@ function ChatApp() {
         </div>
 
         <BetterHelpBanner />
+
+        {/* Reply preview */}
+        {replyTo && (
+          <div
+            className="flex items-center gap-2 px-3 py-2 flex-shrink-0"
+            style={{ background: "var(--surface2)", borderTop: "1px solid var(--border)" }}
+          >
+            <div className="flex-1 min-w-0">
+              <span className="text-xs" style={{ color: "var(--muted)" }}>Replying to </span>
+              <span className="text-xs font-semibold" style={{ color: "var(--accent)" }}>{replyTo.username}</span>
+              <span className="text-xs block truncate" style={{ color: "var(--muted)" }}>{replyTo.text.slice(0, 80)}</span>
+            </div>
+            <button onClick={() => setReplyTo(null)} className="text-xs flex-shrink-0 hover:opacity-70" style={{ color: "var(--muted)" }}>✕</button>
+          </div>
+        )}
 
         {/* Input bar */}
         {!isQuietRoom && (
@@ -697,6 +758,20 @@ function ChatApp() {
         <PrivateInviteToast fromUsername={privateInvite.fromUsername} roomId={privateInvite.roomId} onDismiss={dismissPrivateInvite} />
       )}
     </div>
+  );
+}
+
+function MessageText({ text }: { text: string }) {
+  const imgRe = /(https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp)(?:\?\S*)?)/gi;
+  const parts = text.split(imgRe);
+  return (
+    <>
+      {parts.map((part, i) =>
+        /^https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp)/i.test(part)
+          ? <img key={i} src={part} alt="" className="max-w-full rounded-xl mt-2 block" style={{ maxHeight: "200px", objectFit: "contain" }} />
+          : part ? <span key={i}>{part}</span> : null
+      )}
+    </>
   );
 }
 
