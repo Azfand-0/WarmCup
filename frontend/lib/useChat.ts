@@ -191,6 +191,16 @@ export function useChat(room: string, username: string, mood: string, flair: str
           setPrivateInvite({ fromUserId: ev.fromUserId as string, fromUsername: ev.fromUsername as string, roomId: ev.roomId as string });
           break;
 
+        case "history": {
+          const incoming = (ev.messages as ChatMessage[]).map((m) => ({ ...m, isSystem: false }));
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const fresh = incoming.filter((m) => !existingIds.has(m.id));
+            return fresh.length > 0 ? [...fresh, ...prev] : prev;
+          });
+          break;
+        }
+
         case "breathing_update": {
           const uid = ev.userId as string;
           const active = ev.active as boolean;

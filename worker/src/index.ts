@@ -3,6 +3,18 @@ export interface Env {
   ENVIRONMENT: string;
 }
 
+interface StoredMessage {
+  id: string;
+  userId: string;
+  username: string;
+  text: string;
+  timestamp: number;
+  color: string;
+  levelBadge?: string;
+}
+
+const MAX_HISTORY = 50;
+
 interface SessionMeta {
   userId: string;
   username: string;
@@ -83,15 +95,25 @@ export class ChatRoom implements DurableObject {
       messageCount: 0,
     };
 
+    // Close any stale connections with the same username (prevents ghost counts)
+    for (const stale of this.state.getWebSockets()) {
+      const staleMeta: SessionMeta | null = stale.deserializeAttachment();
+      if (staleMeta?.username === username) {
+        try { stale.close(1000, "Reconnected"); } catch { /* already closing */ }
+      }
+    }
+
     this.state.acceptWebSocket(server, [meta.userId]);
     server.serializeAttachment(meta);
 
-    const [wsCount, vibe, msgCount, slowMode] = await Promise.all([
-      Promise.resolve(this.state.getWebSockets().length),
+    const [vibe, msgCount, slowMode, history] = await Promise.all([
       this.state.storage.get<string>("vibe"),
       this.state.storage.get<number>("msg_count"),
       this.state.storage.get<boolean>("slow_mode"),
+      this.state.storage.get<StoredMessage[]>("history"),
     ]);
+
+    const wsCount = this.state.getWebSockets().length;
 
     server.send(JSON.stringify({
       type: "welcome",
@@ -102,6 +124,11 @@ export class ChatRoom implements DurableObject {
       msgCount: msgCount ?? 0,
       slowMode: slowMode ?? false,
     }));
+
+    // Send room history so new joiners see recent messages
+    if (history && history.length > 0) {
+      server.send(JSON.stringify({ type: "history", messages: history }));
+    }
 
     this.broadcastExcept(server, {
       type: "presence",
@@ -150,11 +177,12 @@ export class ChatRoom implements DurableObject {
         await this.state.storage.put("msg_count", count);
 
         const levelBadge = typeof data.levelBadge === "string"
-          ? data.levelBadge.slice(0, 4)
-          : "";
+          ? data.levelBadge.slice(0, 4) : "";
+        const msgId = crypto.randomUUID();
+
         this.broadcastAll({
           type: "message",
-          id: crypto.randomUUID(),
+          id: msgId,
           userId: meta.userId,
           username: meta.username,
           mood: meta.mood,
@@ -164,6 +192,12 @@ export class ChatRoom implements DurableObject {
           text,
           timestamp: now,
         });
+
+        // Persist to room history (last 50 non-system messages)
+        const history = (await this.state.storage.get<StoredMessage[]>("history")) ?? [];
+        history.push({ id: msgId, userId: meta.userId, username: meta.username, text, timestamp: now, color: meta.color, levelBadge });
+        if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+        await this.state.storage.put("history", history);
 
         if (MILESTONES.includes(count)) {
           this.broadcastAll({
