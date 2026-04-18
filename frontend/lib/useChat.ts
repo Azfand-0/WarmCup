@@ -210,7 +210,9 @@ export function useChat(room: string, username: string, mood: string, flair: str
 
     ws.onclose = () => {
       setConnected(false);
-      if (aliveRef.current) {
+      // Only reconnect if THIS ws is still the current one — prevents stale
+      // onclose from a room-switch firing after the new connection is already up
+      if (aliveRef.current && ws === wsRef.current) {
         timerRef.current = setTimeout(() => { setShowConnecting(true); connect(); }, RECONNECT_DELAY);
       }
     };
