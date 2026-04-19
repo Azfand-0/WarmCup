@@ -107,6 +107,27 @@ export default function WallPage() {
         </div>
       </form>
 
+      {/* Donation CTA */}
+      <div
+        className="mb-6 px-4 py-4 rounded-2xl flex items-center gap-3"
+        style={{ background: "rgba(196,149,106,0.06)", border: "1px solid rgba(196,149,106,0.15)" }}
+      >
+        <span className="text-2xl flex-shrink-0">☕</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>WarmCup is free, forever.</p>
+          <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>If it helped you tonight, keep the lights on for the next person.</p>
+        </div>
+        <a
+          href="https://ko-fi.com/warmcup"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-80"
+          style={{ background: "linear-gradient(135deg, #c4956a, #b8a9d4)", color: "#0f0d0a" }}
+        >
+          Donate →
+        </a>
+      </div>
+
       {/* Feed */}
       {loading ? (
         <p className="text-sm text-center py-10" style={{ color: "var(--muted)" }}>Loading…</p>

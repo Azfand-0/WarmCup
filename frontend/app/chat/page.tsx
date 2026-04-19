@@ -29,14 +29,17 @@ import WarmCupTip         from "@/components/WarmCupTip";
 import CommunityMilestone from "@/components/CommunityMilestone";
 import GratitudeToast     from "@/components/GratitudeToast";
 import QuietRoomBanner    from "@/components/QuietRoomBanner";
-import EmojiPicker        from "@/components/EmojiPicker";
-import OnlineUsers        from "@/components/OnlineUsers";
-import ReportModal        from "@/components/ReportModal";
-import SafetyNotice       from "@/components/SafetyNotice";
-import PremiumModal       from "@/components/PremiumModal";
-import SponsorBanner      from "@/components/SponsorBanner";
-import TherapistDirectory from "@/components/TherapistDirectory";
-import ErrorBoundary      from "@/components/ErrorBoundary";
+import EmojiPicker           from "@/components/EmojiPicker";
+import OnlineUsers           from "@/components/OnlineUsers";
+import ReportModal           from "@/components/ReportModal";
+import SafetyNotice          from "@/components/SafetyNotice";
+import PremiumModal          from "@/components/PremiumModal";
+import TherapistDirectory    from "@/components/TherapistDirectory";
+import ErrorBoundary         from "@/components/ErrorBoundary";
+import AgeGate               from "@/components/AgeGate";
+import PanicMatchModal       from "@/components/PanicMatchModal";
+import PostSessionReflection from "@/components/PostSessionReflection";
+import CrisisCard            from "@/components/CrisisCard";
 import { usePremium }     from "@/lib/usePremium";
 import type { PremiumTier } from "@/lib/usePremium";
 import { useLevel }       from "@/lib/useLevel";
@@ -72,6 +75,10 @@ function ChatApp() {
   const [isScrolledUp, setIsScrolledUp]   = useState(false);
   const [unreadCount, setUnreadCount]     = useState(0);
   const [replyTo, setReplyTo]             = useState<{ id: string; username: string; text: string } | null>(null);
+  const [showPanicMatch, setShowPanicMatch]     = useState(false);
+  const [showPostReflect, setShowPostReflect]   = useState(false);
+  const [showCrisisCard, setShowCrisisCard]     = useState(false);
+  const [sessionStarted, setSessionStarted]     = useState(false);
 
   const [premium, updatePremium] = usePremium();
   const { level, increment: incrementLevel } = useLevel();
@@ -97,6 +104,9 @@ function ChatApp() {
     milestone, gratitude, privateInvite, dismissPrivateInvite,
     breathingUsers, helpedCount, onlineUsers,
     panicPaired, dismissPanicPaired,
+    stillHere, dismissStillHere,
+    crisisCheckIn, dismissCrisisCheckIn,
+    blockedUsers, blockUser, flagCrisis,
     sendMessage, sendTyping, sendReaction,
     sendFeelingBetter, sendGratitude,
     sendVibeVote, sendPrivateInvite,
@@ -176,8 +186,12 @@ function ChatApp() {
       setInput("");
       return;
     }
-    if (crisis) setShowCrisis(true);
-    if (filtered) { sendMessage(filtered, level.badge, replyTo ?? undefined); incrementLevel(); }
+    if (crisis) { setShowCrisis(true); setShowCrisisCard(true); }
+    if (filtered) {
+      sendMessage(filtered, level.badge, replyTo ?? undefined);
+      incrementLevel();
+      if (!sessionStarted) setSessionStarted(true);
+    }
     setInput("");
     setReplyTo(null);
     inputRef.current?.focus();
@@ -189,6 +203,11 @@ function ChatApp() {
   }
 
   function switchRoom(ch: Channel) {
+    // Offer post-session reflection when leaving a room where user participated
+    if (sessionStarted && room !== ch.id && !room.startsWith("panic-match")) {
+      setShowPostReflect(true);
+      setSessionStarted(false);
+    }
     setRoom(ch.id);
     setSidebarOpen(false);
     const url = new URL(window.location.href);
@@ -335,9 +354,9 @@ function ChatApp() {
 
         {/* Bottom tools + share */}
         <div className="px-3 pb-4 pt-3 flex-shrink-0 space-y-2.5" style={{ borderTop: "1px solid var(--border)" }}>
-          {/* Panic match button */}
+          {/* Panic match button — opens 3-step onboarding modal first */}
           <button
-            onClick={() => { sendBreathingStart(); switchRoom({ id: "panic-match", name: "Panic Match", flag: "🆘", group: "themed" as const }); }}
+            onClick={() => setShowPanicMatch(true)}
             className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 hover:opacity-90"
             style={{ background: "rgba(196,80,80,0.15)", color: "#e88080", border: "1px solid rgba(196,80,80,0.3)" }}
           >
@@ -423,7 +442,7 @@ function ChatApp() {
             </div>
             <div className="text-xs flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
               <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 online-dot" style={{ background: connected ? "var(--online)" : showConnecting ? "var(--danger)" : "var(--muted)" }} />
-              {connected ? (count <= 1 ? "Just you — others will join" : `${count} people here`) : showConnecting ? "Reconnecting…" : ""}
+              {connected ? (count <= 1 ? "Just you — others will join" : `${count} people here`) : showConnecting ? "Back in a moment…" : ""}
             </div>
           </div>
           <RoomVibe vibe={vibe} onVote={sendVibeVote} />
@@ -457,8 +476,26 @@ function ChatApp() {
           )}
         </div>
 
-        {/* Sponsor banner — country rooms only */}
-        {!isPrivateRoom && <SponsorBanner roomId={room} />}
+        {/* Crisis card — shown when user's message triggers crisis keywords */}
+        {showCrisisCard && <CrisisCard onDismiss={() => setShowCrisisCard(false)} />}
+
+        {/* "Still here" toast — worker pings quiet users after 20 min */}
+        {stillHere && (
+          <div className="mx-4 mt-2 px-4 py-3 rounded-2xl flex items-center gap-3 flex-shrink-0" style={{ background: "rgba(196,149,106,0.08)", border: "1px solid rgba(196,149,106,0.2)" }}>
+            <span className="text-lg">🕯️</span>
+            <p className="flex-1 text-sm" style={{ color: "var(--text-soft)" }}>Still here with you. Take your time.</p>
+            <button onClick={dismissStillHere} className="text-xs hover:opacity-70" style={{ color: "var(--muted)" }}>✕</button>
+          </div>
+        )}
+
+        {/* Crisis check-in — someone flagged this user as struggling */}
+        {crisisCheckIn && (
+          <div className="mx-4 mt-2 px-4 py-3 rounded-2xl flex items-center gap-3 flex-shrink-0" style={{ background: "rgba(184,169,212,0.08)", border: "1px solid rgba(184,169,212,0.2)" }}>
+            <span className="text-lg">💜</span>
+            <p className="flex-1 text-sm" style={{ color: "var(--text-soft)" }}>{crisisCheckIn}</p>
+            <button onClick={dismissCrisisCheckIn} className="text-xs hover:opacity-70" style={{ color: "var(--muted)" }}>✕</button>
+          </div>
+        )}
 
         {/* Blocked message warning */}
         {blockedWarning && (
@@ -481,27 +518,41 @@ function ChatApp() {
           ) : (
             <>
               {messages.filter((m) => !m.isSystem).length === 0 && connected && (
-                <div className="flex flex-col items-center justify-center h-full text-center py-20 gap-4">
+                <div className="flex flex-col items-center justify-center h-full text-center py-16 gap-5">
                   <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "rgba(196,149,106,0.1)", border: "1px solid rgba(196,149,106,0.2)" }}>
                     {isPrivateRoom ? "🔒" : "🕯️"}
                   </div>
-                  <div>
-                    {isPrivateRoom ? (
-                      <>
-                        <p className="font-medium" style={{ color: "var(--text-soft)" }}>Waiting for your partner to join…</p>
-                        <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>Share the invite link or wait for them to accept.</p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-medium" style={{ color: "var(--text-soft)" }}>You made it here. That took courage.</p>
-                        <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>Say anything. No pressure. You&apos;re safe.</p>
-                      </>
-                    )}
-                  </div>
+                  {isPrivateRoom ? (
+                    <div>
+                      <p className="font-medium" style={{ color: "var(--text-soft)" }}>Waiting for your partner to join…</p>
+                      <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>Share the invite link or wait for them to accept.</p>
+                    </div>
+                  ) : count <= 1 ? (
+                    <div className="space-y-3 max-w-xs">
+                      <p className="font-medium" style={{ color: "var(--text-soft)" }}>You&apos;re the first one here tonight.</p>
+                      <p className="text-sm" style={{ color: "var(--muted)" }}>That happens. Someone usually joins within a few minutes.</p>
+                      <p className="text-sm" style={{ color: "var(--muted)" }}>While you wait — try the breathing exercise. It helps.</p>
+                      <button
+                        onClick={() => setShowBreathing(true)}
+                        className="mt-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95"
+                        style={{ background: "rgba(196,149,106,0.12)", color: "var(--accent)", border: "1px solid rgba(196,149,106,0.25)" }}
+                      >
+                        🫁 Start breathing exercise
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="font-medium" style={{ color: "var(--text-soft)" }}>You made it here. That took courage.</p>
+                      <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>Say anything. No pressure. You&apos;re safe.</p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {messages.map((msg) => {
+                // Hide messages from blocked users
+                if (!msg.isSystem && blockedUsers.has(msg.userId)) return null;
+
                 if (msg.isSystem) {
                   return (
                     <div key={msg.id} className="flex justify-center msg-in">
@@ -619,6 +670,22 @@ function ChatApp() {
                                 >
                                   🚩
                                 </button>
+                                <button
+                                  onClick={() => flagCrisis(msg.userId)}
+                                  title="This person may be in crisis"
+                                  className="text-xs px-1.5 py-0.5 rounded-lg"
+                                  style={{ background: "rgba(184,169,212,0.1)", color: "var(--lavender)", border: "1px solid rgba(184,169,212,0.2)" }}
+                                >
+                                  💜
+                                </button>
+                                <button
+                                  onClick={() => blockUser(msg.userId)}
+                                  title="Block user"
+                                  className="text-xs px-1.5 py-0.5 rounded-lg"
+                                  style={{ background: "var(--surface2)", color: "var(--muted)", border: "1px solid var(--border)" }}
+                                >
+                                  🚫
+                                </button>
                               </>
                             )}
                           </div>
@@ -710,7 +777,7 @@ function ChatApp() {
               ref={inputRef}
               value={input}
               onChange={(e) => { setInput(e.target.value); sendTyping(); }}
-              placeholder={connected ? "Share what's on your heart…" : showConnecting ? "Reconnecting…" : "Share what's on your heart…"}
+              placeholder={connected ? "Share what's on your heart…" : showConnecting ? "Back in a moment…" : "Share what's on your heart…"}
               disabled={!connected}
               maxLength={500}
               autoComplete="off"
@@ -757,6 +824,33 @@ function ChatApp() {
       {privateInvite && privateInvite.fromUserId !== myUserId && (
         <PrivateInviteToast fromUsername={privateInvite.fromUsername} roomId={privateInvite.roomId} onDismiss={dismissPrivateInvite} />
       )}
+
+      {/* Panic match onboarding */}
+      {showPanicMatch && (
+        <PanicMatchModal
+          onConfirm={() => {
+            setShowPanicMatch(false);
+            sendBreathingStart();
+            switchRoom({ id: "panic-match", name: "Panic Match", flag: "🆘", group: "themed" as const });
+          }}
+          onCancel={() => {
+            setShowPanicMatch(false);
+            switchRoom({ id: "global", name: "Global", flag: "🌍", group: "country" as const });
+          }}
+        />
+      )}
+
+      {/* Post-session reflection */}
+      {showPostReflect && (
+        <PostSessionReflection
+          onClose={() => setShowPostReflect(false)}
+          onShareToWall={async (text) => {
+            const base = (process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8787")
+              .replace(/^wss?:\/\//, (m) => m.startsWith("wss") ? "https://" : "http://");
+            try { await fetch(`${base}/wall`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) }); } catch { /* offline */ }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -796,10 +890,12 @@ function ChannelButton({ ch, active, onClick }: { ch: Channel; active: boolean; 
 
 export default function ChatPage() {
   return (
-    <ErrorBoundary>
-      <Suspense>
-        <ChatApp />
-      </Suspense>
-    </ErrorBoundary>
+    <AgeGate>
+      <ErrorBoundary>
+        <Suspense>
+          <ChatApp />
+        </Suspense>
+      </ErrorBoundary>
+    </AgeGate>
   );
 }

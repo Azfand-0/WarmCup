@@ -64,6 +64,9 @@ export function useChat(room: string, username: string, mood: string, flair: str
     return parseInt(localStorage.getItem("warmcup_helped_count") ?? "0", 10);
   });
   const [panicPaired, setPanicPaired]     = useState<string | null>(null);
+  const [stillHere, setStillHere]         = useState(false);
+  const [crisisCheckIn, setCrisisCheckIn] = useState<string | null>(null);
+  const [blockedUsers, setBlockedUsers]   = useState<Set<string>>(new Set());
 
   const wsRef         = useRef<WebSocket | null>(null);
   const messagesRef   = useRef<ChatMessage[]>([]);
@@ -234,6 +237,16 @@ export function useChat(room: string, username: string, mood: string, flair: str
         case "panic_paired":
           setPanicPaired(ev.roomId as string);
           break;
+
+        case "still_here":
+          setStillHere(true);
+          setTimeout(() => setStillHere(false), 15000);
+          break;
+
+        case "crisis_check_in":
+          setCrisisCheckIn(ev.message as string);
+          setTimeout(() => setCrisisCheckIn(null), 20000);
+          break;
       }
     };
 
@@ -300,6 +313,13 @@ export function useChat(room: string, username: string, mood: string, flair: str
   const sendBreathingStart    = useCallback(() => send({ type: "breathing_start" }), []);
   const sendBreathingStop     = useCallback(() => send({ type: "breathing_stop" }), []);
   const dismissPanicPaired    = useCallback(() => setPanicPaired(null), []);
+  const dismissStillHere      = useCallback(() => setStillHere(false), []);
+  const dismissCrisisCheckIn  = useCallback(() => setCrisisCheckIn(null), []);
+  const blockUser             = useCallback((targetUserId: string) => {
+    setBlockedUsers((prev) => new Set([...prev, targetUserId]));
+    send({ type: "block_user", targetUserId });
+  }, []);
+  const flagCrisis            = useCallback((targetUserId: string) => send({ type: "crisis_flag", targetUserId }), []);
 
   return {
     messages, count, connected, showConnecting, myUserId,
@@ -307,6 +327,9 @@ export function useChat(room: string, username: string, mood: string, flair: str
     milestone, gratitude, userProfiles,
     breathingUsers, helpedCount, onlineUsers,
     panicPaired, dismissPanicPaired,
+    stillHere, dismissStillHere,
+    crisisCheckIn, dismissCrisisCheckIn,
+    blockedUsers, blockUser, flagCrisis,
     privateInvite, dismissPrivateInvite,
     sendMessage, sendTyping, sendReaction,
     sendFeelingBetter, sendGratitude,

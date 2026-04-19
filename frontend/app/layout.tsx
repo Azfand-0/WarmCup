@@ -39,13 +39,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      {/* Replace ca-pub-XXXXXXXXXXXXXXXX with your real Google AdSense publisher ID */}
-      <Script
-        async
-        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
-        crossOrigin="anonymous"
-        strategy="lazyOnload"
-      />
+      <Script id="sw-register" strategy="afterInteractive">{`
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        }
+      `}</Script>
       <body>{children}</body>
     </html>
   );
