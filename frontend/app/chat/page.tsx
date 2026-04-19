@@ -2,17 +2,19 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useChat }        from "@/lib/useChat";
-import { useNotifications } from "@/lib/useNotifications";
-import { getUsername }    from "@/lib/username";
-import { useStreak }      from "@/lib/useStreak";
-import { useSound }       from "@/lib/useSound";
+import { useChat }           from "@/lib/useChat";
+import { useNotifications }  from "@/lib/useNotifications";
+import { getUsername }       from "@/lib/username";
+import { useStreak }         from "@/lib/useStreak";
+import { useSound }          from "@/lib/useSound";
 import { useWeeklyRecap, recordVisit } from "@/lib/useWeeklyRecap";
-import { useUserProfile } from "@/lib/useUserProfile";
-import { getUserColor }   from "@/lib/userColors";
-import { filterText }     from "@/lib/safeWords";
+import { useUserProfile }    from "@/lib/useUserProfile";
+import { getUserColor }      from "@/lib/userColors";
+import { filterText }        from "@/lib/safeWords";
+import { useAnchor }         from "@/lib/useAnchor";
+import { useRoomCounts }     from "@/lib/useRoomCounts";
 import { COUNTRY_CHANNELS, THEMED_CHANNELS, CHANNELS, detectCountryChannel } from "@/lib/channels";
-import type { Channel }   from "@/lib/channels";
+import type { Channel }      from "@/lib/channels";
 
 import BreathingModal     from "@/components/BreathingModal";
 import GroundingModal     from "@/components/GroundingModal";
@@ -40,6 +42,7 @@ import AgeGate               from "@/components/AgeGate";
 import PanicMatchModal       from "@/components/PanicMatchModal";
 import PostSessionReflection from "@/components/PostSessionReflection";
 import CrisisCard            from "@/components/CrisisCard";
+import OnboardingModal       from "@/components/OnboardingModal";
 import { usePremium }     from "@/lib/usePremium";
 import type { PremiumTier } from "@/lib/usePremium";
 import { useLevel }       from "@/lib/useLevel";
@@ -82,6 +85,8 @@ function ChatApp() {
 
   const [premium, updatePremium] = usePremium();
   const { level, increment: incrementLevel } = useLevel();
+  const { anchorId, setAnchor } = useAnchor();
+  const roomCounts = useRoomCounts();
 
   const bottomRef      = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLInputElement>(null);
@@ -107,6 +112,7 @@ function ChatApp() {
     stillHere, dismissStillHere,
     crisisCheckIn, dismissCrisisCheckIn,
     blockedUsers, blockUser, flagCrisis,
+    anchorOnline, reactionOnMyMsg,
     sendMessage, sendTyping, sendReaction,
     sendFeelingBetter, sendGratitude,
     sendVibeVote, sendPrivateInvite,
@@ -234,7 +240,7 @@ function ChatApp() {
   if (!username) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
+    <div className="flex overflow-hidden" style={{ background: "var(--bg)", height: "100dvh" }}>
 
       {/* ── Sidebar ─────────────────────────────────────────── */}
       <aside
@@ -251,7 +257,7 @@ function ChatApp() {
             <button onClick={() => router.push("/")} className="font-bold hover:opacity-80" style={{ color: "var(--accent)" }}>
               warmcup
             </button>
-            <button className="md:hidden text-sm" onClick={() => setSidebarOpen(false)} style={{ color: "var(--muted)" }}>✕</button>
+            <button aria-label="Close menu" className="md:hidden text-sm" onClick={() => setSidebarOpen(false)} style={{ color: "var(--muted)" }}>✕</button>
           </div>
           <div className="flex items-center gap-2">
             <div
@@ -317,7 +323,7 @@ function ChatApp() {
                 {/* List */}
                 <div className="max-h-52 overflow-y-auto space-y-0.5">
                   {filteredCountries.map((ch) => (
-                    <ChannelButton key={ch.id} ch={ch} active={ch.id === room} onClick={() => switchRoom(ch)} />
+                    <ChannelButton key={ch.id} ch={ch} active={ch.id === room} onClick={() => switchRoom(ch)} count={roomCounts[ch.id]} />
                   ))}
                   {filteredCountries.length === 0 && (
                     <p className="text-xs text-center py-3" style={{ color: "var(--muted)" }}>No match</p>
@@ -340,7 +346,7 @@ function ChatApp() {
             {hangoutOpen && (
               <div className="mt-1 space-y-0.5">
                 {THEMED_CHANNELS.map((ch) => (
-                  <ChannelButton key={ch.id} ch={ch} active={ch.id === room} onClick={() => switchRoom(ch)} />
+                  <ChannelButton key={ch.id} ch={ch} active={ch.id === room} onClick={() => switchRoom(ch)} count={roomCounts[ch.id]} />
                 ))}
               </div>
             )}
@@ -349,7 +355,7 @@ function ChatApp() {
 
         {/* Online users */}
         <div className="flex-shrink-0 py-1" style={{ borderTop: "1px solid var(--border)" }}>
-          <OnlineUsers users={onlineUsers} myUserId={myUserId} />
+          <OnlineUsers users={onlineUsers} myUserId={myUserId} anchorId={anchorId} onSetAnchor={setAnchor} />
         </div>
 
         {/* Bottom tools + share */}
@@ -374,6 +380,7 @@ function ChatApp() {
                 key={title}
                 onClick={onClick}
                 title={title}
+                aria-label={title}
                 className="flex-1 h-8 rounded-lg flex items-center justify-center text-sm transition-all hover:opacity-80"
                 style={{
                   background: active ? "rgba(196,149,106,0.15)" : "var(--surface2)",
@@ -433,7 +440,7 @@ function ChatApp() {
           className="flex items-center gap-2 px-4 py-3 flex-shrink-0"
           style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
         >
-          <button className="md:hidden p-1 text-xl" onClick={() => setSidebarOpen(true)} style={{ color: "var(--muted)" }}>☰</button>
+          <button aria-label="Open menu" className="md:hidden p-1 text-xl" onClick={() => setSidebarOpen(true)} style={{ color: "var(--muted)" }}>☰</button>
           <span className="text-xl">{currentChannel.flag}</span>
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm" style={{ color: "var(--text)" }}>
@@ -494,6 +501,22 @@ function ChatApp() {
             <span className="text-lg">💜</span>
             <p className="flex-1 text-sm" style={{ color: "var(--text-soft)" }}>{crisisCheckIn}</p>
             <button onClick={dismissCrisisCheckIn} className="text-xs hover:opacity-70" style={{ color: "var(--muted)" }}>✕</button>
+          </div>
+        )}
+
+        {/* Anchor online — your chosen anchor just joined */}
+        {anchorOnline && (
+          <div className="mx-4 mt-2 px-4 py-3 rounded-2xl flex items-center gap-3 flex-shrink-0" style={{ background: "rgba(126,200,160,0.08)", border: "1px solid rgba(126,200,160,0.2)" }}>
+            <span className="text-lg">⚓</span>
+            <p className="flex-1 text-sm" style={{ color: "var(--text-soft)" }}>Your anchor is here tonight.</p>
+          </div>
+        )}
+
+        {/* Reaction on my message */}
+        {reactionOnMyMsg && (
+          <div className="mx-4 mt-2 px-4 py-3 rounded-2xl flex items-center gap-3 flex-shrink-0" style={{ background: "rgba(196,149,106,0.08)", border: "1px solid rgba(196,149,106,0.2)" }}>
+            <span className="text-lg">{reactionOnMyMsg.emoji}</span>
+            <p className="flex-1 text-sm" style={{ color: "var(--text-soft)" }}>Someone reacted to your message.</p>
           </div>
         )}
 
@@ -639,6 +662,7 @@ function ChatApp() {
                             <button
                               onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
                               title="Reply"
+                              aria-label={`Reply to ${msg.username}`}
                               className="text-xs px-1.5 py-0.5 rounded-lg"
                               style={{ background: "rgba(184,169,212,0.1)", color: "var(--lavender)", border: "1px solid rgba(184,169,212,0.2)" }}
                             >
@@ -740,6 +764,7 @@ function ChatApp() {
           {isScrolledUp && (
             <button
               onClick={scrollToBottom}
+              aria-label={unreadCount > 0 ? `${unreadCount} new messages, scroll to bottom` : "Scroll to bottom"}
               className="sticky bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold shadow-lg transition-all hover:opacity-90"
               style={{ background: "var(--accent)", color: "#0f0d0a", border: "none" }}
             >
@@ -761,7 +786,7 @@ function ChatApp() {
               <span className="text-xs font-semibold" style={{ color: "var(--accent)" }}>{replyTo.username}</span>
               <span className="text-xs block truncate" style={{ color: "var(--muted)" }}>{replyTo.text.slice(0, 80)}</span>
             </div>
-            <button onClick={() => setReplyTo(null)} className="text-xs flex-shrink-0 hover:opacity-70" style={{ color: "var(--muted)" }}>✕</button>
+            <button aria-label="Cancel reply" onClick={() => setReplyTo(null)} className="text-xs flex-shrink-0 hover:opacity-70" style={{ color: "var(--muted)" }}>✕</button>
           </div>
         )}
 
@@ -769,7 +794,7 @@ function ChatApp() {
         {!isQuietRoom && (
           <form
             onSubmit={handleSend}
-            className="flex items-center gap-2 px-3 py-2.5 flex-shrink-0"
+            className="flex items-center gap-2 px-3 py-2.5 pb-safe flex-shrink-0"
             style={{ background: "var(--surface)", borderTop: "1px solid var(--border)" }}
           >
             <EmojiPicker onSelect={insertEmoji} />
@@ -788,16 +813,20 @@ function ChatApp() {
             />
             <button
               type="submit"
+              aria-label="Send message"
               disabled={!connected || !input.trim()}
               className="w-10 h-10 sm:w-auto sm:h-auto sm:px-5 sm:py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95 disabled:opacity-30 flex-shrink-0 flex items-center justify-center"
               style={{ background: "linear-gradient(135deg, #c4956a 0%, #b8a9d4 100%)", color: "#0f0d0a" }}
             >
-              <span className="hidden sm:inline">Send</span>
-              <span className="sm:hidden text-base">↑</span>
+              <span className="hidden sm:inline" aria-hidden="true">Send</span>
+              <span className="sm:hidden text-base" aria-hidden="true">↑</span>
             </button>
           </form>
         )}
       </div>
+
+      {/* Onboarding — shown once to new users */}
+      <OnboardingModal onDone={() => inputRef.current?.focus()} />
 
       {/* Modals */}
       <SafetyNotice />
@@ -869,7 +898,7 @@ function MessageText({ text }: { text: string }) {
   );
 }
 
-function ChannelButton({ ch, active, onClick }: { ch: Channel; active: boolean; onClick: () => void }) {
+function ChannelButton({ ch, active, onClick, count }: { ch: Channel; active: boolean; onClick: () => void; count?: number }) {
   return (
     <button
       onClick={onClick}
@@ -884,6 +913,9 @@ function ChannelButton({ ch, active, onClick }: { ch: Channel; active: boolean; 
       <span className="text-base leading-none">{ch.flag}</span>
       <span className="truncate flex-1">{ch.name}</span>
       {ch.quiet && <span className="text-xs" style={{ color: "var(--muted)" }}>silent</span>}
+      {!ch.quiet && count != null && count > 0 && (
+        <span className="text-xs flex-shrink-0" style={{ color: "var(--online)" }}>● {count}</span>
+      )}
     </button>
   );
 }

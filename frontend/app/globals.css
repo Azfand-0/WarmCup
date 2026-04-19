@@ -25,11 +25,18 @@
 
 html, body {
   height: 100%;
+  height: 100dvh; /* dynamic viewport: collapses with mobile keyboard */
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Prevent iOS bounce-scroll on the root */
+  overscroll-behavior: none;
 }
+
+/* Safe-area utilities for notch / home-indicator phones */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe { padding-top:    env(safe-area-inset-top,    0px); }
 
 /* Subtle warm grain texture on body for coziness */
 body::before {

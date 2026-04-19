@@ -63,10 +63,12 @@ export function useChat(room: string, username: string, mood: string, flair: str
     if (typeof window === "undefined") return 0;
     return parseInt(localStorage.getItem("warmcup_helped_count") ?? "0", 10);
   });
-  const [panicPaired, setPanicPaired]     = useState<string | null>(null);
-  const [stillHere, setStillHere]         = useState(false);
-  const [crisisCheckIn, setCrisisCheckIn] = useState<string | null>(null);
-  const [blockedUsers, setBlockedUsers]   = useState<Set<string>>(new Set());
+  const [panicPaired, setPanicPaired]       = useState<string | null>(null);
+  const [stillHere, setStillHere]           = useState(false);
+  const [crisisCheckIn, setCrisisCheckIn]   = useState<string | null>(null);
+  const [blockedUsers, setBlockedUsers]     = useState<Set<string>>(new Set());
+  const [anchorOnline, setAnchorOnline]     = useState(false);
+  const [reactionOnMyMsg, setReactionOnMyMsg] = useState<{ emoji: string } | null>(null);
 
   const wsRef         = useRef<WebSocket | null>(null);
   const messagesRef   = useRef<ChatMessage[]>([]);
@@ -141,6 +143,14 @@ export function useChat(room: string, username: string, mood: string, flair: str
               const filtered = prev.filter((u) => u.username !== ev.username);
               return [...filtered, { userId: ev.userId as string, username: ev.username as string, color: ev.color as string, mood: ev.mood as string }];
             });
+            // Anchor notification — check localStorage directly (avoids stale closure)
+            if (typeof window !== "undefined") {
+              const ancId = localStorage.getItem("warmcup_anchor_id");
+              if (ancId && ancId === (ev.userId as string)) {
+                setAnchorOnline(true);
+                setTimeout(() => setAnchorOnline(false), 12000);
+              }
+            }
           } else {
             setOnlineUsers((prev) => prev.filter((u) => u.username !== ev.username));
           }
@@ -164,19 +174,28 @@ export function useChat(room: string, username: string, mood: string, flair: str
           break;
         }
 
-        case "reaction":
+        case "reaction": {
+          const rMid   = ev.messageId as string;
+          const rEmoji = ev.emoji as string;
+          const rUid   = ev.userId as string;
           setReactions((p) => {
-            const mid = ev.messageId as string;
-            const emoji = ev.emoji as string;
-            const uid = ev.userId as string;
-            const msgR = { ...(p[mid] ?? {}) };
-            const users = [...(msgR[emoji] ?? [])];
-            if (ev.action === "add" && !users.includes(uid)) users.push(uid);
-            if (ev.action === "remove") { const i = users.indexOf(uid); if (i > -1) users.splice(i, 1); }
-            msgR[emoji] = users;
-            return { ...p, [mid]: msgR };
+            const msgR = { ...(p[rMid] ?? {}) };
+            const users = [...(msgR[rEmoji] ?? [])];
+            if (ev.action === "add" && !users.includes(rUid)) users.push(rUid);
+            if (ev.action === "remove") { const i = users.indexOf(rUid); if (i > -1) users.splice(i, 1); }
+            msgR[rEmoji] = users;
+            return { ...p, [rMid]: msgR };
           });
+          // Notify if someone reacted to my message (and it wasn't me)
+          if (ev.action === "add" && rUid !== myUserId) {
+            const mine = messagesRef.current.find((m) => m.id === rMid && m.userId === myUserId);
+            if (mine) {
+              setReactionOnMyMsg({ emoji: rEmoji });
+              setTimeout(() => setReactionOnMyMsg(null), 8000);
+            }
+          }
           break;
+        }
 
         case "gratitude":
           setGratitude({ fromUsername: ev.fromUsername as string, fromColor: ev.fromColor as string, message: ev.message as string });
@@ -330,6 +349,7 @@ export function useChat(room: string, username: string, mood: string, flair: str
     stillHere, dismissStillHere,
     crisisCheckIn, dismissCrisisCheckIn,
     blockedUsers, blockUser, flagCrisis,
+    anchorOnline, reactionOnMyMsg,
     privateInvite, dismissPrivateInvite,
     sendMessage, sendTyping, sendReaction,
     sendFeelingBetter, sendGratitude,
